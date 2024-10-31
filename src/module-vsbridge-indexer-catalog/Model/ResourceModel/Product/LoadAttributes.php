@@ -93,7 +93,7 @@ class LoadAttributes
             return $this->attributesById[$attributeId];
         }
 
-        throw new \Magento\Framework\Exception\LocalizedException(__('Attribute not found.'));
+        throw new \Magento\Framework\Exception\LocalizedException(__("Attribute with id {$attributeId} not found."));
     }
 
     /**
@@ -113,7 +113,7 @@ class LoadAttributes
             return $this->attributesById[$attributeId];
         }
 
-        throw new \Magento\Framework\Exception\LocalizedException(__('Attribute not found.'));
+        throw new \Magento\Framework\Exception\LocalizedException(__("Attribute with code {$attributeCode} not found."));
     }
 
     /**
