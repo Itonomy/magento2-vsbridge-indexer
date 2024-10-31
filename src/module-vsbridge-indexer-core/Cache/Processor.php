@@ -11,6 +11,7 @@ namespace Divante\VsbridgeIndexerCore\Cache;
 use Magento\Framework\HTTP\Adapter\CurlFactory;
 use Magento\Framework\Event\ManagerInterface as EventManager;
 use Psr\Log\LoggerInterface;
+use Laminas\Http\Request;
 
 /**
  * Class Processor
@@ -161,19 +162,51 @@ class Processor
         /** @var \Magento\Framework\HTTP\Adapter\Curl $curl */
         $curl = $this->curlFactory->create();
         $curl->setConfig($config);
-        $curl->write(\Zend_Http_Client::GET, $uri, '1.0');
+        $curl->write(Request::METHOD_GET, $uri, '1.0');
         $response = $curl->read();
 
         if ($response !== false && !empty($response)) {
-            $httpCode = \Zend_Http_Response::extractCode($response);
+            $httpCode = $this->extractCode($response);
 
             if ($httpCode !== 200) {
-                $response = \Zend_Http_Response::extractBody($response);
+                $response = $this->extractBody($response);
                 $this->logger->error($response);
             }
         } else {
             $this->logger->error('Problem with clearing VSF cache.');
         }
+    }
+
+    /**
+     * Extract the response code from a response string
+     *
+     * @param string $response_str
+     * @return int
+     */
+    private function extractCode($response_str)
+    {
+        preg_match("|^HTTP/[\d\.x]+ (\d+)|", $response_str, $m);
+
+        if (isset($m[1])) {
+            return (int) $m[1];
+        } else {
+            return false;
+        }
+    }
+
+    /**
+     * Extract the body from a response string
+     *
+     * @param string $response_str
+     * @return string
+     */
+    private function extractBody($response_str)
+    {
+        $parts = preg_split('|(?:\r\n){2}|m', $response_str, 2);
+        if (isset($parts[1])) {
+            return $parts[1];
+        }
+        return '';
     }
 
     /**
