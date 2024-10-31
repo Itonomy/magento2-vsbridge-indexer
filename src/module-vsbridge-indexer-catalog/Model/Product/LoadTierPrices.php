@@ -97,7 +97,13 @@ class LoadTierPrices implements LoadTierPricesInterface
             $indexData[$productId]['tier_prices'] = [];
 
             if (isset($tierPrices[$linkFieldValue])) {
-                $tierRowsData = $tierPrices[$linkFieldValue];
+                if (isset($indexData[$productId]['regular_price'])) {
+                    $tierRowsData = $this->modifyTierPriceData(
+                        $tierPrices[$linkFieldValue],
+                        $indexData[$productId]['regular_price']
+                    );
+                }
+
                 $tierRowsData = $backend->preparePriceData(
                     $tierRowsData,
                     $indexData[$productId]['type_id'],
@@ -125,6 +131,40 @@ class LoadTierPrices implements LoadTierPricesInterface
     private function syncTierPrices(): bool
     {
         return $this->configSettings->syncTierPrices();
+    }
+
+    /**
+     * Adjust for percentage tier price
+     *
+     * @param array $tierPriceData
+     * @param float $originalPrice
+     *
+     * @return array
+     */
+    private function modifyTierPriceData(array $tierPriceData, float $originalPrice): array
+    {
+        foreach ($tierPriceData as $key => $tierPrice) {
+            $percentageValue = $this->getPercentage($tierPrice);
+
+            if ($percentageValue) {
+                $tierPriceData[$key]['price'] = $originalPrice * (1 - $percentageValue / 100);
+            }
+        }
+
+        return $tierPriceData;
+    }
+
+    /**
+     * Check whether price has percentage value.
+     *
+     * @param array $priceRow
+     * @return float|null
+     */
+    private function getPercentage(array $priceRow): ?float
+    {
+        return isset($priceRow['percentage_value']) && is_numeric($priceRow['percentage_value'])
+            ? $priceRow['percentage_value']
+            : null;
     }
 
     /**
