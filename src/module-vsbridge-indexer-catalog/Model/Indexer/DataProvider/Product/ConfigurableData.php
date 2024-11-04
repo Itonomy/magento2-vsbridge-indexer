@@ -127,7 +127,8 @@ class ConfigurableData implements DataProviderInterface
              * Skip exporting configurable products without options
              */
             if (!empty($productDTO['configurable_options'])) {
-                $productsList[$productId] = $this->prepareConfigurableProduct($productDTO);
+                $x = $this->prepareConfigurableProduct($productDTO);
+                $productsList[$productId] = $x;
             }
         }
 
@@ -223,7 +224,15 @@ class ConfigurableData implements DataProviderInterface
             $values = [];
 
             foreach ($options as $option) {
+                $isOptionInStock = $this->isOptionInStock($attributeCode, (int)$option['value'], $configurableChildren);
+
+                if ($isOptionInStock) {
+                    $values[] = (int) $option['value'];
+                }
+
                 $values[] = (int) $option['value'];
+
+
                 $optionValue = [
                     'value_index' => $option['value'],
                     'label' => $option['label'],
@@ -241,6 +250,26 @@ class ConfigurableData implements DataProviderInterface
         }
 
         return $productDTO;
+    }
+
+    /**
+     * Check if child product corresponding to a configurable product option value is in stock
+     *
+     * @param string $attributeCode
+     * @param int $optionValue
+     * @param array $configurableChildren
+     * @return bool
+     */
+    private function isOptionInStock(string $attributeCode, int $optionValue, array $configurableChildren): bool
+    {
+        foreach ($configurableChildren as $child) {
+            if ((isset($child['stock']) && $child['stock']['is_in_stock'])
+                && (int)$child[$attributeCode] === $optionValue) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
