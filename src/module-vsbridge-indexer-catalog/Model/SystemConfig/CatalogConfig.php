@@ -76,6 +76,15 @@ class CatalogConfig implements CatalogConfigurationInterface
     {
         return (bool) $this->getConfigParam(CatalogConfigurationInterface::USE_CATALOG_RULES);
     }
+    /**
+     * @inheritDoc
+     *
+     * @return bool
+     */
+    public function syncGroupPrices(): bool
+    {
+        return (bool) $this->getConfigParam(CatalogConfigurationInterface::SYNC_GROUP_PRICES);
+    }
 
     /**
      * @inheritDoc

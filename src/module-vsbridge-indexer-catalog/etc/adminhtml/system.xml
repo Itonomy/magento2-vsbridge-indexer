@@ -56,6 +56,10 @@
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
                     <comment>Only visible attributes will be exported in "product.attributes_metadata"</comment>
                 </field>
+                <field id="sync_customer_group_prices" translate="label comment" type="select" sortOrder="58" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Sync customer group prices</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
                 <field id="sync_tier_prices" translate="label comment" type="select" sortOrder="60" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Sync Tier Prices</label>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>

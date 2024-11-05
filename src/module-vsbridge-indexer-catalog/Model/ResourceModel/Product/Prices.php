@@ -1,17 +1,13 @@
-<?php declare(strict_types = 1);
-/**
- * @package   Divante\VsbridgeIndexerCatalog
- * @author    Agata Firlejczyk <afirlejczyk@divante.pl>
- * @copyright 2019 Divante Sp. z o.o.
- * @license   See LICENSE_DIVANTE.txt for license details.
- */
+<?php declare(strict_types=1);
 
 namespace Divante\VsbridgeIndexerCatalog\Model\ResourceModel\Product;
 
+use Magento\Customer\Model\ResourceModel\Group\Collection;
 use Magento\Framework\App\ResourceConnection;
+use Magento\Framework\DB\Select;
+use Magento\Framework\Exception\LocalizedException;
 use Magento\Store\Model\StoreManagerInterface;
 use Magento\CatalogRule\Model\ResourceModel\Rule\Product\Price as CatalogRulePrice;
-
 use Divante\VsbridgeIndexerCatalog\Api\CatalogConfigurationInterface;
 use Divante\VsbridgeIndexerCatalog\Model\ProductMetaData;
 use Divante\VsbridgeIndexerCatalog\Model\Product\PriceTableResolverProxy;
@@ -52,6 +48,16 @@ class Prices
     private $catalogPriceResourceModel;
 
     /**
+     * @var Collection
+     */
+    private Collection $customerGroupCollection;
+
+    /**
+     * @var array
+     */
+    private array $customerGroupsCache;
+
+    /**
      * Prices constructor.
      *
      * @param ResourceConnection $resourceModel
@@ -60,6 +66,8 @@ class Prices
      * @param CatalogConfigurationInterface $catalogSettings
      * @param CatalogRulePrice $catalogPriceResourceModel
      * @param PriceTableResolverProxy $priceTableResolver
+     * @param Collection $customerGroupCollection
+     * @param CatalogConfig $config
      */
     public function __construct(
         ResourceConnection $resourceModel,
@@ -67,7 +75,8 @@ class Prices
         ProductMetaData $productMetaData,
         CatalogConfigurationInterface $catalogSettings,
         CatalogRulePrice $catalogPriceResourceModel,
-        PriceTableResolverProxy $priceTableResolver
+        PriceTableResolverProxy $priceTableResolver,
+        Collection $customerGroupCollection
     ) {
         $this->resource = $resourceModel;
         $this->storeManager = $storeManager;
@@ -75,6 +84,7 @@ class Prices
         $this->priceTableResolver = $priceTableResolver;
         $this->settings = $catalogSettings;
         $this->catalogPriceResourceModel = $catalogPriceResourceModel;
+        $this->customerGroupCollection = $customerGroupCollection;
     }
 
     /**
@@ -87,11 +97,55 @@ class Prices
      */
     public function loadPriceData(int $storeId, array $productIds): array
     {
-        $entityIdField = $this->productMetaData->get()->getIdentifierField();
         $websiteId = (int)$this->getStore($storeId)->getWebsiteId();
-
-        // Only default customer Group ID (0) is supported now
         $customerGroupId = 0;
+        $select = $this->getPricesSelect($websiteId, $customerGroupId, $productIds);
+        $prices = $this->getConnection()->fetchAssoc($select);
+
+        if ($this->settings->useCatalogRules()) {
+            $catalogPrices = $this->getCatalogRulePrices($websiteId, $productIds, $customerGroupId);
+
+            foreach ($catalogPrices as $productId => $finalPrice) {
+                $priceIndexerPrice = $prices[$productId]['final_price'] ?? $prices[$productId]['final_price'] ?? $finalPrice;
+                $prices[$productId]['final_price'] = min($finalPrice, $priceIndexerPrice);
+            }
+        }
+
+        if ($this->settings->syncGroupPrices()) {
+            foreach (array_keys($this->getAllCustomerGroups()) as $customerGroupId) {
+                $select = $this->getPricesSelect($websiteId, $customerGroupId, $productIds);
+                $cursor = $this->getConnection()->query($select);
+
+                while ($row = $cursor->fetch()) {
+                    if (isset($row['final_price'])) {
+                        $prices[$row['entity_id']]['group_prices'][$customerGroupId]['final_price'] = $row['final_price'];
+                    }
+                }
+
+                if ($this->settings->useCatalogRules()) {
+                    $catalogPrices = $this->getCatalogRulePrices($websiteId, $productIds, $customerGroupId);
+
+                    foreach ($catalogPrices as $productId => $finalPrice) {
+                        $priceIndexerPrice = $prices[$productId]['group_prices'][$customerGroupId]['final_price'] ?? $prices[$productId]['group_prices'][$customerGroupId]['final_price'] ?? $finalPrice;
+                        $prices[$productId]['group_prices'][$customerGroupId]['final_price'] = min($finalPrice, $priceIndexerPrice);
+                    }
+                }
+            }
+        }
+
+        return $prices;
+    }
+
+
+    /**
+     * @param $websiteId
+     * @param $customerGroupId
+     * @param $productIds
+     * @return Select
+     */
+    private function getPricesSelect($websiteId, $customerGroupId, $productIds): Select
+    {
+        $entityIdField = $this->productMetaData->get()->getIdentifierField();
         $priceIndexTableName = $this->getPriceIndexTableName($websiteId, $customerGroupId);
 
         $select = $this->getConnection()->select()
@@ -107,26 +161,17 @@ class Prices
             ->where('p.website_id = ?', $websiteId)
             ->where("p.$entityIdField IN (?)", $productIds);
 
-        $prices = $this->getConnection()->fetchAssoc($select);
-
-        if ($this->settings->useCatalogRules()) {
-            $catalogPrices = $this->getCatalogRulePrices($websiteId, $productIds);
-
-            foreach ($catalogPrices as $productId => $finalPrice) {
-                $priceIndexerPrice =
-                    $prices[$productId]['final_price'] ?? $prices[$productId]['final_price'] ?? $finalPrice;
-                $prices[$productId]['final_price'] = min($finalPrice, $priceIndexerPrice);
-            }
-        }
-
-        return $prices;
+        return $select;
     }
 
     /**
      * @param int $websiteId
      * @param array $productsIds
+     * @param int $customerGroupId
+     * @return array
+     * @throws LocalizedException
      */
-    private function getCatalogRulePrices(int $websiteId, array $productsIds)
+    private function getCatalogRulePrices(int $websiteId, array $productsIds, int $customerGroupId)
     {
         $connection = $this->getConnection();
         $select = $connection->select();
@@ -142,8 +187,6 @@ class Prices
             []
         );
 
-        // Only default customer Group ID (0) is supported now
-        $customerGroupId = 0;
         $select->where('cpp.product_id IN (?)', $productsIds);
         $select->where('cpp.customer_group_id = ?', $customerGroupId);
         $select->where('cpp.website_id = ?', $websiteId);
@@ -183,5 +226,21 @@ class Prices
     private function getConnection()
     {
         return $this->resource->getConnection();
+    }
+
+    /**
+     * @return array
+     */
+    private function getAllCustomerGroups(): array
+    {
+        if (!empty($this->customerGroupsCache)) {
+            return $this->customerGroupsCache;
+        }
+
+        foreach ($this->customerGroupCollection->toOptionArray() as $customerGroup) {
+            $this->customerGroupsCache[$customerGroup['value']] = $customerGroup['label'];
+        }
+
+        return $this->customerGroupsCache;
     }
 }

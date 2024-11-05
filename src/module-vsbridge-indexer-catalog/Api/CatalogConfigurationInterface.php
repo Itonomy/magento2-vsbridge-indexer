@@ -25,6 +25,12 @@ interface CatalogConfigurationInterface
      * Prices
      */
     const USE_CATALOG_RULES = 'use_catalog_rules';
+
+    /**
+     * Sync customer group prices
+     */
+    const SYNC_GROUP_PRICES = 'sync_tier_prices';
+
     const SYNC_TIER_PRICES = 'sync_tier_prices';
 
     const ADD_SWATCHES_OPTIONS = 'add_swatches_to_configurable_options';
@@ -69,6 +75,11 @@ interface CatalogConfigurationInterface
      * @return bool
      */
     public function useCatalogRules(): bool;
+
+    /**
+     * @return bool
+     */
+    public function syncGroupPrices(): bool;
 
     /**
      * @return bool
