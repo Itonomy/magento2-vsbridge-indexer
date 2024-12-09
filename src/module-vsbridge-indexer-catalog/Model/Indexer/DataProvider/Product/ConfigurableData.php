@@ -127,8 +127,7 @@ class ConfigurableData implements DataProviderInterface
              * Skip exporting configurable products without options
              */
             if (!empty($productDTO['configurable_options'])) {
-                $x = $this->prepareConfigurableProduct($productDTO);
-                $productsList[$productId] = $x;
+                $productsList[$productId] = $this->prepareConfigurableProduct($productDTO);
             }
         }
 
@@ -229,9 +228,6 @@ class ConfigurableData implements DataProviderInterface
                 if ($isOptionInStock) {
                     $values[] = (int) $option['value'];
                 }
-
-                $values[] = (int) $option['value'];
-
 
                 $optionValue = [
                     'value_index' => $option['value'],
